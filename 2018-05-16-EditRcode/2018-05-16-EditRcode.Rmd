@@ -1,0 +1,188 @@
+---
+title: Tidy R code from R
+author: "Jonathan Phelps"
+date: '2018-05-16'
+slug: tidy_R_code
+categories:
+  - R
+tags:
+  - R
+  - regex
+keywords:
+  - readLines
+  - R regex
+output: md_document
+  # html_document:
+editor_options:
+  chunk_output_type: console
+thumbnailImagePosition: left
+thumbnailImage: https://lh3.googleusercontent.com/QK-7jAZaPE7mlSDzaccPX1gFghM-7TUqTDfanmtDGBBnWI2c06PD0-OU3DIohaIiNJNMduq3AVRjlIgvQaQDwby64eW4RtV5MGE48pOjQ4pdxtjkfOPMZHbyWajMPaZk-fLK8iHecWacE4hn-8lL3kN0b9wFpY7o5E4JqcpJWFAcrQv6hXV40nNSO2ljrTSnu5_Dm4v6-GIvaSenhPrXQ-km30aAdbTjTm3jtgHJcksHJ_M4vTrunMOzlPPj2n3WmU3O_aeqJyawYc0jbTWBxfE3FiwX1IWxscgB2pnJwD2wGskgedoJW7RLFAy_WIb77xy4KloHe9k-8Chc_3rW4nusTKTFUaJJtisl0q-qc_akw57qpf-TASKVXDpqFw3pYbmPbvvZetHZyaGhBDI9HJArWDogzvloi1rk1smOFh6YXmEOFSyul8OY36XrkP0BQCHHWaL1JcmCEnwXtMjAYJ1pItByIYK6d-HM0V92Gq8rbW05GuqckRjMMojODksKyKWnReUse3i6_X0QM9n2U48-x28BaYJw-fNo-GmV1Ce7vJrHHe0IEo-f3Z3A0lSAxXdNqQQzYW0sushRnGv8teDw6lGj0rTehWzAu3ka=s849-no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(error = FALSE)
+```
+
+
+This is a simplified version of a script I wrote for work. We have a large
+code base, built up over many years. The end result was a mismatch in formatting.
+
+This script is an example of bulk editing R scripts using regular expressions.
+In particular, standardising the naming convention of R functions to the piped
+format eg `thisIsPiped <- function(){...}`.
+
+Please have these packages:
+```{r}
+# packages
+library(magrittr)
+library(data.table)
+library(rprojroot) # I'm using an rstudio project in my root folder
+```
+
+
+For this tutorial, I have saved in to a "/scripts" folder two files:
+
+**functions.R** - script of functions with different naming conventions
+```{r}
+fun_clean <- function(x){x}
+fun_visualise_data <- function(x){x}
+Fun.Model <- function(x){x}
+funReport <- function(x){x}
+```
+
+**run.R** - script that runs the functions
+```{r eval = FALSE}
+x <- 1
+fun_clean(x)
+fun_visualise_data(x)
+Fun.Model(x)
+funReport(x)
+```
+
+We are going to change them all to the piped structure. The regex I am using
+can be found **[Here](https://regex101.com/r/dUBRzV/5)**. The breakdown of the
+regex is as follows. I'll be using the example `fun_visualise_data <- function(x)`.
+
+`^([^#\n]*)`: The first group captures all lines that don't start with a # ie 
+are comment lines in R. The `\n` isn't needed here if we are evaluating each 
+line of the R script one at a time. It is only useful if running the regex over
+a block of lines and functions. e.g. returns "**fun_visualise**"
+
+`([_\.])`: The second group looks for a single `.` and `_` character. This 
+will match the last one found in e.g. returns "fun_visualise**\_**"
+
+`([^\s,=]*)`: The third group makes the assumption that the function name won't
+end in the `.` or `_`, and will grab the final text entry. e.g. returns "fun_visualise_**data**"
+
+`(\s*)`: The fourth group catches any space text between the function name and
+its assignment.
+
+`(?:(?:<-|=)\s*):` The fifth group (non-capturing) will pick out the assignment
+variable and any space between this and the function call. e.g. returns 
+"fun_visualise_data **<-**"
+
+`(function)\\(`: finally only interested in variables that are functions. Full string is now captured
+
+Ok, so first I will use the function `readLines` to read in the scripts in to a list `read_files`. I've unlisted these so that I have one single lookup too.
+```{r}
+# script path - assume you start at the root. replace root_path with your path
+# if you aren't using an Rstudio project. rmd is in root, files are in ./scripts.
+root_path <- rprojroot::find_rstudio_root_file()
+script_path <- file.path(root_path, "scripts")
+setwd(script_path)
+all_files <- c("run.R", "functions.R")
+
+# read in the text to R
+read_files <- lapply(all_files, function(file){
+  readLines(file)
+})
+names(read_files) <- all_files
+unlist_files <- unlist(read_files)
+```
+
+This code takes the functions script, finds all that matches the pattern, and
+returns only the parts before the assignment variable. I did this with base
+at the time, but I'd recommend re-writting with the `stringi` package for practice. 
+
+Special character need to be escaped with an extra backslash. See this website for getting started with Regex in R:  <https://www.regular-expressions.info/rlanguage.html>
+```{r}
+# run through functions
+script <- "functions.R"
+# search and replace to get the functions that need piping
+f <- read_files[[script]]
+pattern <- "^([^#\\n]*)([_\\.])([^\\s,=]*)(\\s*)(?:(?:<-|=)\\s*)(function)\\("
+sub     <- "\\1\\2\\3"
+matches <- regmatches(f, regexpr(pattern, f, perl = TRUE))
+extract <- gsub(pattern, sub, matches, perl = TRUE) %>% trimws()
+matches
+extract
+```
+
+Pipe them:
+```{r}
+orig    <- "(?:[_\\.])(.)"
+piped   <-  "\\U\\1"
+extract_v2 <- gsub(orig, piped, extract, perl = TRUE)
+extract_v2
+```
+
+
+lowercase first letter:
+```{r}
+orig    <- "^(.)"
+lowered <- "\\L\\1"
+extract_v2 <- gsub(orig, lowered, extract_v2, perl = TRUE)
+extract_v2
+```
+
+Store the details of the changes:
+```{r}
+change_dt <- data.table(script = script, orig = extract, change = extract_v2)
+N <- nrow(change_dt)
+change_dt[]
+```
+
+Once we have the changes, simply loop across the scripts and change all cases.
+Made use of `\\b` to define boundaries so that e.g. `fun_clean_2` would not be 
+matched when looking for `fun_clean`.
+
+```{r}
+# now loop and replace in the files
+alter_files <- lapply(seq_along(read_files), function(i){
+  out <- read_files[[i]]
+  for(j in 1:N){
+    f <- change_dt[j, ]
+    out <- gsub(sprintf("\\b%s\\b", f$orig),
+                f$change,
+                out, 
+                perl = TRUE)
+  }
+  out
+})
+names(alter_files) <- names(read_files)
+```
+
+Lets have a look at them both:
+```{r}
+alter_files[["functions.R"]]
+alter_files[["run.R"]]
+```
+Perfect!
+
+Finally, save them out with a new suffix, to check. The original files can be
+over-written when you're happy.
+
+```{r}
+for(i in seq_along(alter_files)){
+  file <- names(alter_files)[[i]]
+  file_new <- gsub("\\.(?:[rR])", "_updated.R", file)
+  cat(alter_files[[i]], file = file_new, sep="\n")
+}
+```
+
+I am not a regex expert. If you have any suggestions on
+how to make this more efficient, please drop me a message :) 
+Thank you

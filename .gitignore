@@ -7,3 +7,6 @@ inst/doc
 *.rds
 .Rproj.user
 vault/
+*.Rhistory
+*.Rproj
+2018-05-01-EconomicFreedomVis/tools/2018-05-01-efv_tutorial.html
